@@ -115,7 +115,7 @@ namespace Remap_Memory_Region
                 {
                     Console.WriteLine($"CRC found at 0x{((long)baseAddress + i).ToString("X")}");
                     //[wow.exe+0x270] == sizeof(.text)
-                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20a85ff, (long)copyBufEx);
+                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20A85ff, (long)copyBufEx);
                 }
             }
 
@@ -141,9 +141,20 @@ namespace Remap_Memory_Region
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowBase (0x02)
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x0A)
                 0x7C, 0x29,                                                         //jl crc
-                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowBaseEnd (0x11)
+                
+                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,       //mov r1, wowBaseEnd (0x11)
+                
+                //0x50,                                                              //push rax
+                //0x48, 0x8B, 0xC1,                                                  //mov rax, rcx
+                //0x48, 0x8B, 0x89, 0x78, 0x02, 0x00, 0x00, 0x90, 0x90, 0x90,         //mov r1, [r1+0x278]   & NOP NOP NOP
+                //0x48, 0x01, 0xC1,                                                 //add rcx,rax
+                //0x48, 0x8B, 0x80, 0x74, 0x02, 0x00, 0x00, 0x90, 0x90, 0x90          //mov rax,[rax+0x274]
+                //0x48, 0x01, 0xC1,                                                 //add rcx,rax
+                //0x58,                                                             //pop rax
+
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x19)
-                0x7F, 0x1A,                                                         //jg crc
+                //0x7F, 0x1A,                                                         //jg crc
+                0x7D, 0x1A,                                                         //jge crc
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, Wowbase (0x20)
                 0x48, 0x29, 0xCF,                                                   //sub r2, r1 (r2-0x28)
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowCopyBase (0x2D)
@@ -162,6 +173,7 @@ namespace Remap_Memory_Region
                 //0x48, 0x3B, 0xC2,                                                 //cmp rax, rcx
                 //0x72, 0xF1,                                                       //jb crc
                 //crc end
+
                 0xC3                                                                //ret
             };
             #endregion asmCave
@@ -183,8 +195,8 @@ namespace Remap_Memory_Region
             {
                 crcDetour[0x03 + i] = splitCaveAddr[i];         //CaveAdr
                 crcCave[0x02 + 1 + i] = splitWowBase[i];        //WowBase
-                crcCave[0x20 + 1 + i] = splitWowBase[i];        //WowBase
                 crcCave[0x11 + 1 + i] = splitWowBaseEnd[i];     //WowBaseEnd
+                crcCave[0x20 + 1 + i] = splitWowBase[i];        //WowBase
                 crcCave[0x2D + 1 + i] = splitWowCopyBase[i];    //WowCopyBase
             }
 
@@ -209,23 +221,38 @@ namespace Remap_Memory_Region
                 }
             }
 
+            if (crcBuffer[0x06] == 0xC8) //checks if rcx is used in codecave
+            {
+                //replace rcx with rax
+                crcDetour[0x00] -= 1;
+                crcDetour[0x02] -= 1;
+                crcDetour[0x0C] -= 1;
+                crcDetour[0x0D] -= 1;
+
+            }
+
             //Change the register (r2) used to calc crc32
 
             //cmp r2, r1 - 0x0A             - 48 39 CF
             crcCave[0x0A + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x0A + 1 + 3] = crcBuffer[0x06];
+            crcCave[0x0A + 1 + 2] = crcBuffer[0x06];
+            crcCave[0x0A + 1 + 2] += 8;
 
             //cmp r2, r1 - 0x19             - 48 39 CF
             crcCave[0x19 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x19 + 1 + 3] = crcBuffer[0x06];
+            crcCave[0x19 + 1 + 2] = crcBuffer[0x06];
+            crcCave[0x19 + 1 + 2] += 8;
 
             //sub r2, r1 (r2-0x28)          - 48 29 CF
             crcCave[0x28 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x28 + 1 + 3] = crcBuffer[0x06];
+            crcCave[0x28 + 1 + 2] = crcBuffer[0x06];
+            crcCave[0x28 + 1 + 2] += 8;
 
             //add r2, r1 (r2-0x35)          - 48 01 CF
             crcCave[0x35 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x35 + 1 + 3] = crcBuffer[0x06];
+            crcCave[0x35 + 1 + 2] = crcBuffer[0x06];
+            crcCave[0x35 + 1 + 2] += 8;
+
 
             /*
              - Comparing
