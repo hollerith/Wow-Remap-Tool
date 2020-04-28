@@ -113,9 +113,6 @@ namespace Remap_Memory_Region
                 }
                 if (isMatch)
                 {
-                    Console.WriteLine($"CRC found at 0x{((long)baseAddress + i).ToString("X")}");
-                    //[wow.exe+0x270] == sizeof(.text)
-                    //detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0, (long)copyBufEx);
                     detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, (long)copyBufEx);
                 }
             }
@@ -141,36 +138,48 @@ namespace Remap_Memory_Region
             //stuff that goes in new allocated section
             byte[] crcCave =
             {
-                0x51,                                                               //push rcx (r1)
-                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowBase (0x02)
-                0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x0A)
-                0x72, 0x38,                                                         //jb crc
-                0x50,                                                              //push rax
-                0x48, 0x8B, 0xC1,                                                  //mov rax, rcx
-                0x8B, 0x89, 0x78, 0x02, 0x00, 0x00,                         //mov ecx, [r1+0x278]
+                0x51,                                                               //push rcx
+                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov rcx, wowBase (0x03)
+                0x48, 0x39, 0xCF,                                                   //cmp r2, rcx - 0x0B
+
+                //0x72, 0x38,                                                         //jb crc
+                0x7C, 0x38,                                                         //jl crc
+
+                0x50,                                                               //push rax
+                0x48, 0x8B, 0xC1,                                                   //mov rax, rcx
+                0x8B, 0x89, 0x78, 0x02, 0x00, 0x00,                                 //mov ecx, [r1+0x278]
                 0x90,
-                0x48, 0x01, 0xC1,                                                 //add rcx,rax
-                0x8B, 0x80, 0x74, 0x02, 0x00, 0x00,                                //mov eax,[rax+0x274]
+                0x48, 0x01, 0xC1,                                                   //add rcx,rax
+                0x8B, 0x80, 0x74, 0x02, 0x00, 0x00,                                 //mov eax,[rax+0x274]
                 0x90,
-                0x48, 0x01, 0xC1,                                                 //add rcx,rax
-                0x58,                                                             //pop rax
-                0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x19) 34
-                0x73, 0x1A,                                                         //jae crc
-                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, Wowbase (0x20) 2F
-                0x48, 0x29, 0xCF,                                                   //sub r2, r1 (r2-0x28)  37
-                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowCopyBase (0x2D) 3C
-                0x48, 0x01, 0xCF,                                                   //add r2, r1 (r2-0x35) 44
-                0x59,                                                               //pop rcx (r1)
-                //crc start
-                0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,                           //+ 0x38  47
+                0x48, 0x01, 0xC1,                                                   //add rcx,rax
+                0x58,                                                               //pop rax
+
+                //0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE, //0x12
+                //0x90, 0x90, 0x90, 0x90,
+                //0x90, 0x90, 0x90, 0x90,
+                //0x90, 0x90, 0x90, 0x90,
+                //0x90, 0x90, 0x90, 
+
+                0x48, 0x39, 0xCF,                                                   //cmp r2, rcx - 0x29
+               
+                //0x73, 0x1A,                                                         //jae crc
+                0x7F, 0x1A,                                                         //jg crc
+
+                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov rcx, Wowbase (0x30)
+                0x48, 0x29, 0xCF,                                                   //sub r2, rcx - 0x38
+                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov rcx, wowCopyBase (0x3D)
+                0x48, 0x01, 0xCF,                                                   //add r2, rcx - 0x45
+                0x59,                                                               //pop rcx
+                //crc:                                                              //crc location start
+                0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,                           //+ 0x47 
                 0x90, 0x90, 0x90,
-                0x90, 0x90, 0x90, 0x90, 0x90,                                       // 15 - 19 bytes
-                0x90, 0x90, 0x90,                                                   // 0x72 0x?? - jb instructions 
-                //crc end
+                0x90, 0x90, 0x90, 0x90, 0x90,                                       // NOP's as placeholder for the 15-19 bytes
+                0x90, 0x90, 0x90,                                                   
+                //crc                                                               //crc location end
                 0xC3                                                                //ret
             };
             byte[] crcCaveRegInstructOffsets = { 0x0B, 0x29, 0x38, 0x45 }; //register offsets (may need to change when register is used in code)
-            byte[] crcCaveRegOffsets = { 0x02, 0x0D, 0x11, 0x31, 0x20, 0x35, 0x42, }; //register offsets (may need to change when register is used in code)
             #endregion asmCave
 
             IntPtr CaveAddr = VirtualAllocEx(processHandle, IntPtr.Zero, crcCave.Length, MemoryAllocationType.MEM_COMMIT, MemoryProtectionConstraints.PAGE_EXECUTE_READWRITE);
@@ -183,14 +192,16 @@ namespace Remap_Memory_Region
             byte[] splitCaveAddr = BitConverter.GetBytes(CaveAddr.ToInt64());       //write CaveAddr to crcDetour buffer
             byte[] splitWowBase = BitConverter.GetBytes(wowBase);                   //write wowBase to crcCave buffer
             byte[] splitWowCopyBase = BitConverter.GetBytes(wowCopyBase);           //write wowCopyBase to crcCave buffer
+            byte[] splitWowBaseEnd = BitConverter.GetBytes(wowBase + 0x020A7600 + 0x1000-1);           //write wowCopyBase to crcCave buffer
 
-            //remove the beef (placeholders)
+            //replace the beef (placeholders)
             for (int i = 0; i < 8; i++)
             {
                 crcDetour[0x03 + i] = splitCaveAddr[i];         //CaveAdr
-                crcCave[0x03 + i] = splitWowBase[i];        //WowBase
-                crcCave[0x30 + i] = splitWowBase[i];        //WowBase
-                crcCave[0x3D + i] = splitWowCopyBase[i];    //WowCopyBase
+                crcCave[0x03 + i] = splitWowBase[i];            //WowBase
+                //crcCave[0x12 + i] = splitWowBaseEnd[i];         //WowBaseEnd
+                crcCave[0x30 + i] = splitWowBase[i];            //WowBase
+                crcCave[0x3D + i] = splitWowCopyBase[i];        //WowCopyBase
             }
 
             //obtain crc instructions
@@ -205,10 +216,10 @@ namespace Remap_Memory_Region
             for (int i = 0; i < 88; i++)
             {
                 //jb is the last instruction and starts with 0x72 (2 bytes long)
-                crcCave[0x49 + i] = crcBuffer[i];               //write byte to codecave
+                crcCave[0x49 + i] = crcBuffer[i];                   //write byte to codecave
                 if(crcBuffer[i] == 0x72)
                 {
-                    crcCave[0x49 + i + 1] = crcBuffer[i + 1];   //include last byte of JB instruction before breaking
+                    crcCave[0x49 + i + 1] = crcBuffer[i + 1];       //include last byte of JB instruction before breaking
                     origCrcInstructionLength = i + 2;               //Keep track of bytes used to NOP later
                     break;
                 }
@@ -217,13 +228,13 @@ namespace Remap_Memory_Region
             //list used registers
             bool[] usedRegs = { false, false, false, false, false, false, false, false }; //rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi
 
-            //TODO: unstable?
+
             //check byte code to find used stuff
-            usedRegs[(crcBuffer[0x05]-0x04)/8] = true;           //x,[reg+reg*8]
-            usedRegs[(crcBuffer[0x09]-0xC0)] = true;             //inc x
+            usedRegs[(crcBuffer[0x05]-0x04)/8] = true;              //x,[reg+reg*8]
+            usedRegs[(crcBuffer[0x09]-0xC0)] = true;                //inc x
 
             if(crcBuffer[0x0C] >= 0xC0 && crcBuffer[0x0C] < 0xC8)
-                usedRegs[(crcBuffer[0x0C]-0xC0)] = true;         // cmp ?, x
+                usedRegs[(crcBuffer[0x0C]-0xC0)] = true;            // cmp ?, x
 
             byte selectReg = 0;
             for(byte r = 0; r < usedRegs.Length; r++)
@@ -256,6 +267,7 @@ namespace Remap_Memory_Region
             }
 
             /*
+              - Some logic things
              - Comparing
                 cmp rax,rcx 
                 48 39 X
@@ -340,7 +352,7 @@ namespace Remap_Memory_Region
                 return false;
             }
 
-            Console.WriteLine($"Detoured CRC at {crcLocation.ToString("X")} to {CaveAddr.ToString("X")}");
+            Console.WriteLine($"Bypassed CRC at {crcLocation.ToString("X")}"); // to {CaveAddr.ToString("X")}");
             return true;
         }
 
