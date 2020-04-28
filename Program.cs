@@ -115,7 +115,8 @@ namespace Remap_Memory_Region
                 {
                     Console.WriteLine($"CRC found at 0x{((long)baseAddress + i).ToString("X")}");
                     //[wow.exe+0x270] == sizeof(.text)
-                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20A85ff, (long)copyBufEx);
+                    //detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0, (long)copyBufEx);
+                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20A7600 + 0x1000-1, (long)copyBufEx);
                 }
             }
 
@@ -128,20 +129,26 @@ namespace Remap_Memory_Region
             #region asmCave
             byte[] crcDetour =
             {
-                0x51,                                                               //push rcx
-                0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov rcx, CaveAddr (0x03)
-                0xFF, 0xD1,                                                         //call rcx
-                0x59,                                                               //pop rcx
+                0x50,                                                               //push rax
+                0x48, 0xB8, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov rax, CaveAddr (0x03)
+                0xFF, 0xD0,                                                         //call rax
+                0x58,                                                               //pop rax
                 0x90                                                                //nop
             };
+            byte[] crcDetourRegOffsets = { 0x00, 0x02, 0x0C, 0x0D }; //regiser offsets (may need to change when register is used in code)
+
             byte[] crcCave =
             {
                 0x51,                                                               //push rcx (r1)
 
+                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowBase (0x02)
+                //0x90, 0x90, 0x90,
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x0A)
                 0x7C, 0x29,                                                         //jl crc
-                
+                //0x90, 0x90,
+                //0x72, 0x29,                                                         //jb crc
+                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,       //mov r1, wowBaseEnd (0x11)
                 
                 //0x50,                                                              //push rax
@@ -152,12 +159,22 @@ namespace Remap_Memory_Region
                 //0x48, 0x01, 0xC1,                                                 //add rcx,rax
                 //0x58,                                                             //pop rax
 
+                //0x90, 0x90, 0x90,
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x19)
-                //0x7F, 0x1A,                                                         //jg crc
-                0x7D, 0x1A,                                                         //jge crc
+                
+                0x7F, 0x1A,                                                         //jg crc
+                //0x7D, 0x1A,                                                         //jge crc
+                //0x73, 0x1A,                                                         //jae crc
+                
+                //0x90, 0x90,
+                //0x77, 0x1A,                                                         //ja crc
+                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, Wowbase (0x20)
+                //0x90, 0x90, 0x90,
                 0x48, 0x29, 0xCF,                                                   //sub r2, r1 (r2-0x28)
+                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowCopyBase (0x2D)
+                //0x90, 0x90, 0x90,
                 0x48, 0x01, 0xCF,                                                   //add r2, r1 (r2-0x35)
 
                 0x59,                                                               //pop rcx (r1)
@@ -176,6 +193,8 @@ namespace Remap_Memory_Region
 
                 0xC3                                                                //ret
             };
+            byte[] crcCaveRegInstructOffsets = { 0x0A, 0x19, 0x28, 0x35 }; //register offsets (may need to change when register is used in code)
+            byte[] crcCaveRegOffsets = { 0x01, 0x0C, 0x10, 0x1B, 0x1F, 0x2A, 0x2C, }; //register offsets (may need to change when register is used in code)
             #endregion asmCave
 
             IntPtr CaveAddr = VirtualAllocEx(processHandle, IntPtr.Zero, crcCave.Length, MemoryAllocationType.MEM_COMMIT, MemoryProtectionConstraints.PAGE_EXECUTE_READWRITE);
@@ -190,7 +209,7 @@ namespace Remap_Memory_Region
             byte[] splitWowBaseEnd = BitConverter.GetBytes((wowBase + wowSize));    //write wowBaseEnd to crcCave buffer
             byte[] splitWowCopyBase = BitConverter.GetBytes(wowCopyBase);           //write wowCopyBase to crcCave buffer
 
-            //remove dead beef (placeholders)
+            //remove the beef (placeholders)
             for (int i = 0; i < 8; i++)
             {
                 crcDetour[0x03 + i] = splitCaveAddr[i];         //CaveAdr
@@ -221,37 +240,104 @@ namespace Remap_Memory_Region
                 }
             }
 
-            if (crcBuffer[0x06] == 0xC8) //checks if rcx is used in codecave
-            {
-                //replace rcx with rax
-                crcDetour[0x00] -= 1;
-                crcDetour[0x02] -= 1;
-                crcDetour[0x0C] -= 1;
-                crcDetour[0x0D] -= 1;
+            //list all registers and set unused
+            //bool[] usedCodebaseRegs = { true, true, true, true, true, true, true, true }; //rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi
+            //usedCodebaseRegs[(crcBuffer[0x06] - 0xC0) / 8] = false; //chec reg used
 
+            ////find unused register
+            //byte selectCcReg = 0;
+            //for (byte r = 0; r < usedCodebaseRegs.Length; r++)
+            //{
+            //    if (usedCodebaseRegs[r] == false)
+            //    {
+            //        selectCcReg = r;
+            //        break;
+            //    }
+            //}
+
+            //for(int i = 0; i < 123; i++)
+            //{
+            //    crcDetour[i] += selectCcReg; //set selected register
+            //}
+
+            //{
+            //    //decrease each register byte to replace rcx with rax
+            //    crcDetour[0x00] -= 1;
+            //    crcDetour[0x02] -= 1;
+            //    crcDetour[0x0C] -= 1;
+            //    crcDetour[0x0D] -= 1;
+
+            //}
+
+            //list used registers
+            bool[] usedRegs = { false, false, false, false, false, false, false, false }; //rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi
+
+            //check byte code to find used stuff
+            usedRegs[(crcBuffer[0x05]-0x04)/8] = true;           //x,[reg+reg*8]
+            usedRegs[(crcBuffer[0x09]-0xC0)] = true;             //inc x
+
+            if(crcBuffer[0x0C] >= 0xC0 && crcBuffer[0x0C] < 0xC8)
+                usedRegs[(crcBuffer[0x0C]-0xC0)] = true;         // cmp ?, x
+
+
+            byte selectReg = 0;
+            for(byte r = 0; r < usedRegs.Length; r++)
+            {
+                if (usedRegs[r] == false)
+                {
+                    selectReg = r;
+                    break;
+                }
+            }
+
+            //change Detour to non-used register
+            for(int i = 0; i < crcDetourRegOffsets.Length; i++)
+            {
+                crcDetour[crcDetourRegOffsets[i]] += selectReg;      //increase byte to set selected register
             }
 
             //Change the register (r2) used to calc crc32
 
+            //TODO: place in array and loop
+            //for(int i = 0; i < crcCaveRegOffsets.Length; i++)
+            //{
+            //    crcCave[crcCaveRegOffsets[i] + 1 + 0] = crcBuffer[0x01];
+            //    crcCave[crcCaveRegOffsets[i] + 1 + 2] = (byte)(crcBuffer[0x06] + 0x08);
+            //}
+
             //cmp r2, r1 - 0x0A             - 48 39 CF
             crcCave[0x0A + 1 + 0] = crcBuffer[0x01];
             crcCave[0x0A + 1 + 2] = crcBuffer[0x06];
-            crcCave[0x0A + 1 + 2] += 8;
+            if (crcCave[0x0A + 1 + 0] != 0x48)
+                crcCave[0x0A + 1 + 0] = 0x49;
+            else
+                crcCave[0x0A + 1 + 2] += 8;
 
             //cmp r2, r1 - 0x19             - 48 39 CF
             crcCave[0x19 + 1 + 0] = crcBuffer[0x01];
             crcCave[0x19 + 1 + 2] = crcBuffer[0x06];
-            crcCave[0x19 + 1 + 2] += 8;
+            if (crcCave[0x19 + 1 + 0] != 0x48)
+                crcCave[0x19 + 1 + 0] = 0x49;
+            else
+                crcCave[0x19 + 1 + 2] += 8;
 
             //sub r2, r1 (r2-0x28)          - 48 29 CF
             crcCave[0x28 + 1 + 0] = crcBuffer[0x01];
             crcCave[0x28 + 1 + 2] = crcBuffer[0x06];
-            crcCave[0x28 + 1 + 2] += 8;
+            if (crcCave[0x28 + 1 + 0] != 0x48)
+                crcCave[0x28 + 1 + 0] = 0x49;
+            else
+                crcCave[0x28 + 1 + 2] += 8;
+            
+            
 
             //add r2, r1 (r2-0x35)          - 48 01 CF
             crcCave[0x35 + 1 + 0] = crcBuffer[0x01];
             crcCave[0x35 + 1 + 2] = crcBuffer[0x06];
-            crcCave[0x35 + 1 + 2] += 8;
+            if (crcCave[0x35 + 1 + 0] != 0x48)
+                crcCave[0x35 + 1 + 0] = 0x49;
+            else
+                crcCave[0x35 + 1 + 2] += 8;
 
 
             /*
