@@ -116,7 +116,7 @@ namespace Remap_Memory_Region
                     Console.WriteLine($"CRC found at 0x{((long)baseAddress + i).ToString("X")}");
                     //[wow.exe+0x270] == sizeof(.text)
                     //detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0, (long)copyBufEx);
-                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20A7600 + 0x1000-1, (long)copyBufEx);
+                    detourCRC(processHandle, (long)baseAddress+i, (long)baseAddress, 0x20A7600 + 0x1000, (long)copyBufEx);
                 }
             }
 
@@ -140,15 +140,10 @@ namespace Remap_Memory_Region
             byte[] crcCave =
             {
                 0x51,                                                               //push rcx (r1)
-
-                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowBase (0x02)
-                //0x90, 0x90, 0x90,
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x0A)
-                0x7C, 0x29,                                                         //jl crc
-                //0x90, 0x90,
-                //0x72, 0x29,                                                         //jb crc
-                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                //0x7C, 0x29,                                                         //jl crc
+                0x72, 0x29,                                                         //jb crc
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,       //mov r1, wowBaseEnd (0x11)
                 
                 //0x50,                                                              //push rax
@@ -159,22 +154,15 @@ namespace Remap_Memory_Region
                 //0x48, 0x01, 0xC1,                                                 //add rcx,rax
                 //0x58,                                                             //pop rax
 
-                //0x90, 0x90, 0x90,
                 0x48, 0x39, 0xCF,                                                   //cmp r2, r1 (r2-0x19)
                 
-                0x7F, 0x1A,                                                         //jg crc
+                //0x7F, 0x1A,                                                         //jg crc
                 //0x7D, 0x1A,                                                         //jge crc
-                //0x73, 0x1A,                                                         //jae crc
-                
-                //0x90, 0x90,
+                0x73, 0x1A,                                                         //jae crc
                 //0x77, 0x1A,                                                         //ja crc
-                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, Wowbase (0x20)
-                //0x90, 0x90, 0x90,
                 0x48, 0x29, 0xCF,                                                   //sub r2, r1 (r2-0x28)
-                //0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
                 0x48, 0xB9, 0xEF, 0xEE, 0xEE, 0xEE, 0xEE, 0xBE, 0xAD, 0xDE,         //mov r1, wowCopyBase (0x2D)
-                //0x90, 0x90, 0x90,
                 0x48, 0x01, 0xCF,                                                   //add r2, r1 (r2-0x35)
 
                 0x59,                                                               //pop rcx (r1)
@@ -299,45 +287,51 @@ namespace Remap_Memory_Region
             //Change the register (r2) used to calc crc32
 
             //TODO: place in array and loop
-            //for(int i = 0; i < crcCaveRegOffsets.Length; i++)
-            //{
-            //    crcCave[crcCaveRegOffsets[i] + 1 + 0] = crcBuffer[0x01];
-            //    crcCave[crcCaveRegOffsets[i] + 1 + 2] = (byte)(crcBuffer[0x06] + 0x08);
-            //}
+            for (int i = 0; i < crcCaveRegInstructOffsets.Length; i++)
+            {
+                crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] = crcBuffer[0x01]; //copy
+                crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] = crcBuffer[0x06]; //copy
+                if (crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] != 0x48) //check if register is rX
+                {
+                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] = 0x49; //set to rX 
 
-            //cmp r2, r1 - 0x0A             - 48 39 CF
-            crcCave[0x0A + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x0A + 1 + 2] = crcBuffer[0x06];
-            if (crcCave[0x0A + 1 + 0] != 0x48)
-                crcCave[0x0A + 1 + 0] = 0x49;
-            else
-                crcCave[0x0A + 1 + 2] += 8;
+                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] = (byte)(0xC8 + (crcBuffer[0x06] - 0xC0) % 8); //fix first register
+                }
+                else
+                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] += 8; //inc to fix basic registers
+            }
 
-            //cmp r2, r1 - 0x19             - 48 39 CF
-            crcCave[0x19 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x19 + 1 + 2] = crcBuffer[0x06];
-            if (crcCave[0x19 + 1 + 0] != 0x48)
-                crcCave[0x19 + 1 + 0] = 0x49;
-            else
-                crcCave[0x19 + 1 + 2] += 8;
+            ////cmp r2, r1 - 0x0A             - 48 39 CF
+            //crcCave[0x0A + 1 + 0] = crcBuffer[0x01];
+            //crcCave[0x0A + 1 + 2] =  crcBuffer[0x06];
+            //if (crcCave[0x0A + 1 + 0] != 0x48)
+            //    crcCave[0x0A + 1 + 0] = 0x49;
+            //else
+            //    crcCave[0x0A + 1 + 2] += 8;
 
-            //sub r2, r1 (r2-0x28)          - 48 29 CF
-            crcCave[0x28 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x28 + 1 + 2] = crcBuffer[0x06];
-            if (crcCave[0x28 + 1 + 0] != 0x48)
-                crcCave[0x28 + 1 + 0] = 0x49;
-            else
-                crcCave[0x28 + 1 + 2] += 8;
-            
-            
+            ////cmp r2, r1 - 0x19             - 48 39 CF
+            //crcCave[0x19 + 1 + 0] = crcBuffer[0x01];
+            //crcCave[0x19 + 1 + 2] =  crcBuffer[0x06];
+            //if (crcCave[0x19 + 1 + 0] != 0x48)
+            //    crcCave[0x19 + 1 + 0] = 0x49;
+            //else
+            //    crcCave[0x19 + 1 + 2] += 8;
 
-            //add r2, r1 (r2-0x35)          - 48 01 CF
-            crcCave[0x35 + 1 + 0] = crcBuffer[0x01];
-            crcCave[0x35 + 1 + 2] = crcBuffer[0x06];
-            if (crcCave[0x35 + 1 + 0] != 0x48)
-                crcCave[0x35 + 1 + 0] = 0x49;
-            else
-                crcCave[0x35 + 1 + 2] += 8;
+            ////sub r2, r1 (r2-0x28)          - 48 29 CF
+            //crcCave[0x28 + 1 + 0] = crcBuffer[0x01];
+            //crcCave[0x28 + 1 + 2] =  crcBuffer[0x06];
+            //if (crcCave[0x28 + 1 + 0] != 0x48)
+            //    crcCave[0x28 + 1 + 0] = 0x49;
+            //else
+            //    crcCave[0x28 + 1 + 2] += 8;
+
+            ////add r2, r1 (r2-0x35)          - 48 01 CF
+            //crcCave[0x35 + 1 + 0] = crcBuffer[0x01];
+            //crcCave[0x35 + 1 + 2] = crcBuffer[0x06];
+            //if (crcCave[0x35 + 1 + 0] != 0x48)
+            //    crcCave[0x35 + 1 + 0] = 0x49;
+            //else
+            //    crcCave[0x35 + 1 + 2] += 8;
 
 
             /*
