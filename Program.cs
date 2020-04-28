@@ -137,6 +137,7 @@ namespace Remap_Memory_Region
             };
             byte[] crcDetourRegOffsets = { 0x00, 0x02, 0x0C, 0x0D }; //regiser offsets (may need to change when register is used in code)
 
+            //TODO: fix sizing
             byte[] crcCave =
             {
                 0x51,                                                               //push rcx (r1)
@@ -228,45 +229,16 @@ namespace Remap_Memory_Region
                 }
             }
 
-            //list all registers and set unused
-            //bool[] usedCodebaseRegs = { true, true, true, true, true, true, true, true }; //rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi
-            //usedCodebaseRegs[(crcBuffer[0x06] - 0xC0) / 8] = false; //chec reg used
-
-            ////find unused register
-            //byte selectCcReg = 0;
-            //for (byte r = 0; r < usedCodebaseRegs.Length; r++)
-            //{
-            //    if (usedCodebaseRegs[r] == false)
-            //    {
-            //        selectCcReg = r;
-            //        break;
-            //    }
-            //}
-
-            //for(int i = 0; i < 123; i++)
-            //{
-            //    crcDetour[i] += selectCcReg; //set selected register
-            //}
-
-            //{
-            //    //decrease each register byte to replace rcx with rax
-            //    crcDetour[0x00] -= 1;
-            //    crcDetour[0x02] -= 1;
-            //    crcDetour[0x0C] -= 1;
-            //    crcDetour[0x0D] -= 1;
-
-            //}
-
             //list used registers
             bool[] usedRegs = { false, false, false, false, false, false, false, false }; //rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi
 
+            //TODO: unstable?
             //check byte code to find used stuff
             usedRegs[(crcBuffer[0x05]-0x04)/8] = true;           //x,[reg+reg*8]
             usedRegs[(crcBuffer[0x09]-0xC0)] = true;             //inc x
 
             if(crcBuffer[0x0C] >= 0xC0 && crcBuffer[0x0C] < 0xC8)
                 usedRegs[(crcBuffer[0x0C]-0xC0)] = true;         // cmp ?, x
-
 
             byte selectReg = 0;
             for(byte r = 0; r < usedRegs.Length; r++)
@@ -278,61 +250,25 @@ namespace Remap_Memory_Region
                 }
             }
 
-            //change Detour to non-used register
+            //change Detour register to non-used register
             for(int i = 0; i < crcDetourRegOffsets.Length; i++)
             {
                 crcDetour[crcDetourRegOffsets[i]] += selectReg;      //increase byte to set selected register
             }
 
             //Change the register (r2) used to calc crc32
-
-            //TODO: place in array and loop
             for (int i = 0; i < crcCaveRegInstructOffsets.Length; i++)
             {
                 crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] = crcBuffer[0x01]; //copy
                 crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] = crcBuffer[0x06]; //copy
-                if (crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] != 0x48) //check if register is rX
+                if (crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] != 0x48) //check if register is extra register (r8 - r15)
                 {
-                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] = 0x49; //set to rX 
-
-                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] = (byte)(0xC8 + (crcBuffer[0x06] - 0xC0) % 8); //fix first register
+                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 0] = 0x49; //set to extra register type
+                    crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] = (byte)(0xC8 + (crcBuffer[0x06] - 0xC0) % 8); //set second reg to rcx and fix first reg
                 }
                 else
                     crcCave[crcCaveRegInstructOffsets[i] + 1 + 2] += 8; //inc to fix basic registers
             }
-
-            ////cmp r2, r1 - 0x0A             - 48 39 CF
-            //crcCave[0x0A + 1 + 0] = crcBuffer[0x01];
-            //crcCave[0x0A + 1 + 2] =  crcBuffer[0x06];
-            //if (crcCave[0x0A + 1 + 0] != 0x48)
-            //    crcCave[0x0A + 1 + 0] = 0x49;
-            //else
-            //    crcCave[0x0A + 1 + 2] += 8;
-
-            ////cmp r2, r1 - 0x19             - 48 39 CF
-            //crcCave[0x19 + 1 + 0] = crcBuffer[0x01];
-            //crcCave[0x19 + 1 + 2] =  crcBuffer[0x06];
-            //if (crcCave[0x19 + 1 + 0] != 0x48)
-            //    crcCave[0x19 + 1 + 0] = 0x49;
-            //else
-            //    crcCave[0x19 + 1 + 2] += 8;
-
-            ////sub r2, r1 (r2-0x28)          - 48 29 CF
-            //crcCave[0x28 + 1 + 0] = crcBuffer[0x01];
-            //crcCave[0x28 + 1 + 2] =  crcBuffer[0x06];
-            //if (crcCave[0x28 + 1 + 0] != 0x48)
-            //    crcCave[0x28 + 1 + 0] = 0x49;
-            //else
-            //    crcCave[0x28 + 1 + 2] += 8;
-
-            ////add r2, r1 (r2-0x35)          - 48 01 CF
-            //crcCave[0x35 + 1 + 0] = crcBuffer[0x01];
-            //crcCave[0x35 + 1 + 2] = crcBuffer[0x06];
-            //if (crcCave[0x35 + 1 + 0] != 0x48)
-            //    crcCave[0x35 + 1 + 0] = 0x49;
-            //else
-            //    crcCave[0x35 + 1 + 2] += 8;
-
 
             /*
              - Comparing
