@@ -199,7 +199,6 @@ namespace Remap_Memory_Region
             {
                 crcDetour[0x03 + i] = splitCaveAddr[i];         //CaveAdr
                 crcCave[0x03 + i] = splitWowBase[i];            //WowBase
-                //crcCave[0x12 + i] = splitWowBaseEnd[i];         //WowBaseEnd
                 crcCave[0x30 + i] = splitWowBase[i];            //WowBase
                 crcCave[0x3D + i] = splitWowCopyBase[i];        //WowCopyBase
             }
@@ -265,65 +264,6 @@ namespace Remap_Memory_Region
                 else
                     crcCave[crcCaveRegInstructOffsets[i] + 2] += 8; //inc to fix basic registers
             }
-
-            /*
-              - Some logic things
-             - Comparing
-                cmp rax,rcx 
-                48 39 X
-                C8 -> rax
-                C9 -> rcx
-                CA -> rdx
-                CB -> rbx
-                CC -> rsp
-                CD -> rbp
-                CE -> rsi
-                CF -> rdi
-
-                cmp rX, rcx
-
-                49 39 CX
-                x = reg nr
-             - Subtract - 3 byte, 48/49 - 29 - regNr
-                sub rax,rcx
-                48 29 X
-                C8 -> rax
-                C9 -> rcx
-                CA -> rdx
-                CB -> rbx
-                CC -> rsp
-                CD -> rbp
-                CE -> rsi
-                CF -> rdi
-
-                49 29 CX
-                x = reg nr
-
-             - Add - 3 byte, 48/49 - 01 - regNr
-                add rax,rcx
-                48 01 X
-                C8 -> rax
-                C9 -> rcx
-                CA -> rdx
-                CB -> rbx
-                CC -> rsp
-                CD -> rbp
-                CE -> rsi
-                CF -> rdi
-
-                49 01 CX
-                x = reg nr
-
-            - CRC32
-                crc32 rsi,[rax+rax*8]
-                F2 48 0F 38 F0 34 C0 rax
-                F2 48 0F 38 F0 34 C1 rcx
-                F2 48 0F 38 F0 34 C2 rdx
-                F2 48 0F 38 F0 34 C3 rbx
-                F2 49 0F 38 F0 34 C0 r8
-                F2 49 0F 38 F0 34 C7 r15
-                    48/49         CX
-            */
 
             //add nops to end of the detour buffer
             byte[] crcDetourFixed = new byte[origCrcInstructionLength];
@@ -410,22 +350,5 @@ namespace Remap_Memory_Region
             return true;
 
         }
-
-        //CRC find
-        //instruction: https://www.felixcloutier.com/x86/crc32
-
-        /*
-         * 
-                Opcode/Instruction	Op/En	64-Bit Mode	Compat/Leg Mode	Description
-                F2 0F 38 F0 /r CRC32 r32, r/m8	RM	Valid	Valid	Accumulate CRC32 on r/m8.
-                F2 REX 0F 38 F0 /r CRC32 r32, r/m8*	RM	Valid	N.E.	Accumulate CRC32 on r/m8.
-                F2 0F 38 F1 /r CRC32 r32, r/m16	RM	Valid	Valid	Accumulate CRC32 on r/m16.
-                F2 0F 38 F1 /r CRC32 r32, r/m32	RM	Valid	Valid	Accumulate CRC32 on r/m32.
-                F2 REX.W 0F 38 F0 /r CRC32 r64, r/m8	RM	Valid	N.E.	Accumulate CRC32 on r/m8.
-                F2 REX.W 0F 38 F1 /r CRC32 r64, r/m64	RM	Valid	N.E.	Accumulate CRC32 on r/m64.
-
-         */
-            // F2 ?? 0F 38 F1
-
-        }
     }
+}
